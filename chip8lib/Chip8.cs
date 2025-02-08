@@ -1,4 +1,6 @@
-﻿namespace chip8lib;
+﻿using System.Runtime.InteropServices.Swift;
+
+namespace chip8lib;
 
 public class Chip8
 {
@@ -36,10 +38,51 @@ public class Chip8
     public byte[] Registers { get; init; }
     public uint InstructionsPerSecond { get; init; }
     
+    private readonly record struct Instruction()
+    {
+        public UInt16 InstructionType { get; init; } // first nibble
+        public UInt16 X { get; init; } // second nibble (one of the 16 registers)
+        public UInt16 Y { get; init; } // third nibble  (one of the 16 registers)
+        public UInt16 N { get; init; } // fourth nibble (4 bit number)
+        public UInt16 Nn { get; init; } // second byte (8-bit immediate number)
+        public UInt16 Nnn { get; init; } // 2nd, 3rd, and 4th nibble  (12 bit immediate memory-address)
+
+        public Instruction(UInt16 instruct) : this()
+        {
+            UInt16 firstNibbleMask = 0b1111 << 12;
+            UInt16 secondNibbleMask = 0b1111 << 8;
+            UInt16 thirdNibbleMask = 0b1111 << 4;
+            UInt16 fourthNibbleMask = 0b1111;
+            UInt16 secondByteMask = 0b1111_1111;
+            UInt16 twelveBitMask = 0b1111_1111_1111;
+
+            InstructionType = (UInt16)(instruct & firstNibbleMask);
+            X = (UInt16)(instruct & secondNibbleMask);
+            Y = (UInt16)(instruct & thirdNibbleMask);
+            N = (UInt16)(instruct & fourthNibbleMask);
+            Nn = (UInt16)(instruct & secondByteMask);
+            Nnn = (UInt16)(instruct & twelveBitMask);
+        }
+    }
+    
     /*
      * Fetch
      *
      * Read the current instruction at PC. Read two bytes at a time and advance PC by 2. Combine two bytes into
      * one UInt16.
      */
+
+    // TODO: test this
+    private Instruction fetch()
+    {
+        UInt16 lowerInstruction = Ram[ProgramCounter++];
+        UInt16 higherInstruction = Ram[ProgramCounter++];
+
+        UInt16 instruct = (UInt16)((higherInstruction << 8) | lowerInstruction);
+
+        return new Instruction(instruct);
+    }
+    
+    
+    
 }
