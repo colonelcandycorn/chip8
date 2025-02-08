@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices.Swift;
+﻿using Microsoft.Extensions.Logging;
 
 namespace chip8lib;
 
@@ -37,6 +37,7 @@ public class Chip8
     public byte SoundTimer { get; set; } // decrement 60 times a second beep continously well above 0
     public byte[] Registers { get; init; }
     public uint InstructionsPerSecond { get; init; }
+    private ILogger Ilogger { get; init; }
     
     private readonly record struct Instruction()
     {
@@ -73,7 +74,7 @@ public class Chip8
      */
 
     // TODO: test this
-    private Instruction fetch()
+    private Instruction Fetch()
     {
         UInt16 lowerInstruction = Ram[ProgramCounter++];
         UInt16 higherInstruction = Ram[ProgramCounter++];
@@ -82,7 +83,53 @@ public class Chip8
 
         return new Instruction(instruct);
     }
-    
-    
+
+    private void DecodeAndExecute(Instruction instruct)
+    {
+        
+    }
+
+    private void ClearScreen()
+    {
+        for (int row = 0; row < DISPLAY_HEIGHT; row++)
+        {
+            for (int col = 0; col < DISPLAY_WIDTH; col++)
+            {
+                long convertedIndex = col + (row * DISPLAY_WIDTH);
+
+                if (convertedIndex >= Display.Length || convertedIndex < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(convertedIndex),
+                        "Index into Display is out of bounds");
+                }
+                
+                Display[convertedIndex] = false;
+            }
+        }
+    }
+
+    private void Jump(UInt16 nnn)
+    {
+        ProgramCounter = nnn;
+    }
+
+    private void Subroutine(UInt16 nnn)
+    {
+        FunctionStack.Push(nnn);
+        ProgramCounter = nnn;
+    }
+
+    private void SubroutineReturn()
+    {
+        try
+        {
+            ProgramCounter = FunctionStack.Pop();
+        }
+        catch (InvalidOperationException e)
+        {
+            Ilogger.Log(LogLevel.Critical, "When returning from subroutine encountered empty stack");
+            throw;
+        }
+    }
     
 }
