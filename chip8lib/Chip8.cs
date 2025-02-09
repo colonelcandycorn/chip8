@@ -35,7 +35,7 @@ public class Chip8
     public Stack<UInt16> FunctionStack { get; init; }
     public byte DelayTimer { get; set; } // decrement 60 times a second does this need to be async?
     public byte SoundTimer { get; set; } // decrement 60 times a second beep continously well above 0
-    public byte[] Registers { get; init; }
+    public byte[] Registers { get; init; } // V0 through VF
     public uint InstructionsPerSecond { get; init; }
     private ILogger Ilogger { get; init; }
     
@@ -131,5 +131,115 @@ public class Chip8
             throw;
         }
     }
+
+    private void SkipConditionally(Instruction instruct)
+    {
+        switch (instruct.InstructionType)
+        {
+            case 3:
+                if (Registers[instruct.X] == instruct.Nn)
+                {
+                    ProgramCounter += 2;
+                }
+                break;
+            case 4:
+                if (Registers[instruct.X] != instruct.Nn)
+                {
+                    ProgramCounter += 2;
+                }
+                break;
+            case 5:
+                if (Registers[instruct.X] == Registers[instruct.Y])
+                {
+                    ProgramCounter += 2;
+                }
+                break;
+            case 9:
+                if (Registers[instruct.X] != Registers[instruct.Y])
+                {
+                    ProgramCounter += 2;
+                }
+                break;
+            default:
+                Ilogger.Log(LogLevel.Critical, "Skip conditionally encountered an impossible instruction");
+                throw new ArgumentException("Instruction mistakenly sent to skipConditionally");
+        }
+    }
+
+    private void Set(Instruction instruct)
+    {
+        Registers[instruct.X] = (byte) instruct.Nn;
+    }
+
+    private void Add(Instruction instruct)
+    {
+        Registers[instruct.X] += (byte)instruct.Nn;
+    }
+
+    private void SetXToY(Instruction instruct)
+    {
+        Registers[instruct.X] = Registers[instruct.Y];
+    }
+
+    private void BinaryOrXAndY(Instruction instruct)
+    {
+        Registers[instruct.X] = (byte)(Registers[instruct.X] | Registers[instruct.Y]);
+    }
     
+    private void BinaryAndXAndY(Instruction instruct)
+    {
+        Registers[instruct.X] = (byte)(Registers[instruct.X] & Registers[instruct.Y]);
+    }
+    
+    private void BinaryXOrXAndY(Instruction instruct)
+    {
+        Registers[instruct.X] = (byte)(Registers[instruct.X] ^ Registers[instruct.Y]);
+    }
+
+    private void CheckedAdd(Instruction instruct)
+    {
+        try
+        {
+            checked
+            {
+                Registers[instruct.X] += Registers[instruct.Y];
+                Registers[0xF] = 0;
+            }
+        }
+        catch (OverflowException)
+        {
+            Registers[0xF] = 1;
+            unchecked
+            {
+                Registers[instruct.X] += Registers[instruct.Y];
+            }
+        }
+    }
+
+    private void CheckedSubtraction(Instruction instruct)
+    {
+        Registers[0xF] = 1;
+        switch (instruct.N)
+        {
+            case 5:
+                if (Registers[instruct.X] < Registers[instruct.Y])
+                {
+                    Registers[0xF] = 0;
+                }
+
+                Registers[instruct.X] -= Registers[instruct.Y];
+                break;
+            case 7:
+                if (Registers[instruct.Y] < Registers[instruct.X])
+                {
+                    Registers[0xF] = 0;
+                }
+
+                Registers[instruct.X] = (byte) (Registers[instruct.Y] - Registers[instruct.X]);
+                break;
+            default:
+                Ilogger.Log(LogLevel.Critical, "Illegal argument to CheckedSubtraction");
+                throw new ArgumentException("Received an impossible exception in Checked Subtraction");
+        }
+    }
 }
