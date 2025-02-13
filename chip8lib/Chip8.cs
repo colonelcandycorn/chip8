@@ -38,6 +38,10 @@ public class Chip8
     public byte[] Registers { get; init; } // V0 through VF
     public uint InstructionsPerSecond { get; init; }
     private ILogger Ilogger { get; init; }
+    private bool UseYInCheckedShift { get; init; }
+    private bool UseVXForJumpOffset { get; init; }
+    
+    public HashSet<byte> PressedButtons { get; init; }
     
     private readonly record struct Instruction()
     {
@@ -241,5 +245,122 @@ public class Chip8
                 Ilogger.Log(LogLevel.Critical, "Illegal argument to CheckedSubtraction");
                 throw new ArgumentException("Received an impossible exception in Checked Subtraction");
         }
+    }
+
+    private void ConfigurableCheckedShift(Instruction instruct)
+    {
+        if (UseYInCheckedShift)
+        {
+            Registers[instruct.X] = Registers[instruct.Y];
+        }
+
+        byte mask = 0b1000_0000;
+
+        Registers[0xF] = (byte)((Registers[instruct.X] & mask) >> 7);
+
+        Registers[instruct.X] = instruct.N switch
+        {
+            (6) => (byte)(Registers[instruct.X] >> 1),
+            (0xE) => (byte)(Registers[instruct.X] << 1),
+            _ => throw new ArgumentException("Received an impossible instruction in ConfigurableCheckedShift")
+        };
+    }
+
+    private void SetIndex(Instruction instruct)
+    {
+        IndexRegister = instruct.Nnn;
+    }
+
+    private void JumpWithOffset(Instruction instruct)
+    {
+        if (UseVXForJumpOffset)
+        {
+            ProgramCounter = (UInt16) (instruct.Nnn + Registers[instruct.X]);
+        }
+        else
+        {
+            ProgramCounter = (UInt16)(instruct.Nnn + Registers[0]);
+        }
+    }
+
+    private void RandomValue(Instruction instruct)
+    {
+        var rand = new Random();
+        byte[] randByte = new byte[1];
+        
+        rand.NextBytes(randByte);
+
+        Registers[instruct.X] = (byte)(randByte[0] & instruct.Nn);
+    }
+
+    private void DrawOnDisplay(Instruction instruct)
+    {
+        byte YCoord = (byte) (Registers[instruct.Y] & DISPLAY_HEIGHT);
+
+        Registers[0xF] = 0;
+
+        for (int i = 0; i < instruct.N; i++)
+        {
+            byte XCoord = (byte) (Registers[instruct.X] & DISPLAY_WIDTH);
+            byte row = Ram[IndexRegister + i];
+            byte mask = 0b1000_0000;
+            for (int j = 0; j < 8; j++)
+            {
+                byte tmp = (byte)((row & mask) >> (7 - j));
+                mask = (byte)(mask >> 1);
+
+                if (tmp == 1)
+                {
+                    bool currentDisplayValue = Display[XCoord + (YCoord * DISPLAY_WIDTH)];
+
+                    if (currentDisplayValue)
+                    {
+                        Registers[0xF] = 1;
+                    }
+
+                    Display[XCoord + (YCoord * DISPLAY_WIDTH)] = !currentDisplayValue;
+                }
+
+                XCoord += 1;
+
+                if (XCoord > DISPLAY_WIDTH - 1)
+                {
+                    break;
+                }
+            }
+
+            YCoord += 1;
+            if (YCoord > DISPLAY_HEIGHT - 1)
+            {
+                break;
+            }
+        }
+    }
+
+    private void SkipIfKey(Instruction instruct)
+    {
+        bool isPressed = PressedButtons.Contains((byte)instruct.X);
+
+        ProgramCounter += instruct.Nn switch
+        {
+            (0x9E) => (byte)(isPressed ? 2 : 0),
+            (0xA1) => (byte)(isPressed ? 0 : 2),
+            _ => 0
+        };
+    }
+
+    private void VxToDelayTimer(Instruction instruct)
+    {
+        Registers[instruct.X] = DelayTimer;
+    }
+
+    private void DelayTimerToVx(Instruction instruct)
+    {
+        DelayTimer = Registers[instruct.X];
+    }
+
+    private void SoundTimerToVx(Instruction instruct)
+    {
+        SoundTimer = Registers[instruct.X];
     }
 }
